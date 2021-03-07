@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RIG Logistics Demo</title>
+    <script src="https://unpkg.com/event-source-polyfill/src/eventsource.min.js"></script>
+  </head>
+
+  <body>
+    <h1>Events for order "my-super-large-order-123"</h1>
+    <ul
+      id="eventlist"
+      style="list-style: none; padding-left: 0; font-family: monospace"
+    ></ul>
+
+    <script>
+      const orderId = "my-super-large-order-123";
+      const eventlist = document.getElementById("eventlist");
+      const baseUrl = "http://localhost:4000/_rig/v1";
+
+      function addToLog(time, source, whatHappened) {
+        const localeTimeStr = new Date(time).toLocaleTimeString();
+        const sourceStr = source.toUpperCase().padEnd(19);
+        const pre = document.createElement("pre");
+        pre.textContent = `[${localeTimeStr} ${sourceStr}] ${whatHappened}`;
+        const li = document.createElement("li");
+        li.appendChild(pre);
+        eventlist.appendChild(li);
+      }
+
+      const subscriptions = [
+        "parcel scanned",
+        "parcel entered country",
+        "order entered country",
+      ].map((eventType) => ({ eventType }));
+      const url = `${baseUrl}/connection/sse?subscriptions=${JSON.stringify(
+        subscriptions
+      )}`;
+      const source = new EventSource(url);
+
+      source.onopen = (e) => console.log("open", e);
+      source.onmessage = (e) => console.log("message", e);
+      source.onerror = (e) => console.log("error", e);
+
+      source.addEventListener("parcel scanned", function (e) {
+        event = JSON.parse(e.data);
+        const { time, source, data } = event;
+        const { parcelId, distributionCenter } = data;
+        const whatHappened = `parcel ${parcelId} scanned at distribution center ${distributionCenter}`;
+        addToLog(time, source, whatHappened);
+      });
+      source.addEventListener("parcel entered country", function (e) {
+        event = JSON.parse(e.data);
+        const { time, source, data } = event;
+        const { parcelId, country } = data;
+        const whatHappened = `parcel ${parcelId} has entered ${country}`;
+        addToLog(time, source, whatHappened);
+      });
+      source.addEventListener("order entered country", function (e) {
+        event = JSON.parse(e.data);
+        const { time, source, data } = event;
+        const { orderId, parcelId, country } = data;
+        const whatHappened = `parcel ${parcelId} of order ${orderId} has entered ${country}`;
+        addToLog(time, source, whatHappened);
+      });
+
+      source.addEventListener(
+        "error",
+        function (e) {
+          if (e.readyState == EventSource.CLOSED) {
+            console.log("Connection was closed.");
+          } else {
+            console.log("Connection error:", e);
+          }
+        },
+        false
+      );
+    </script>
+  </body>
+</html>

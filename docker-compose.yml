@@ -1,0 +1,92 @@
+version: "3.9"
+services:
+  rig:
+    image: accenture/reactive-interaction-gateway
+    depends_on:
+      - kafka
+    environment:
+      JWT_SECRET_KEY: mysecret
+      LOG_LEVEL: debug
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_SOURCE_TOPICS: scanned,parcelcrossedborder,ordercrossedborder
+      JAEGER_HOST: jaeger
+      # mapping: event type -> field definitions
+      EXTRACTORS: >
+        {
+          "parcel scanned": {
+            "parcelId": {
+              "stable_field_index": 1,
+              "event": { "json_pointer": "/data/parcelId" }
+            }
+          },
+          "parcel entered country": {
+            "parcelId": {
+              "stable_field_index": 1,
+              "event": { "json_pointer": "/data/parcelId" }
+            }
+          },
+          "order entered country": {
+            "orderId": {
+              "stable_field_index": 1,
+              "event": { "json_pointer": "/data/orderId" }
+            },
+            "parcelId": {
+              "stable_field_index": 2,
+              "event": { "json_pointer": "/data/parcelId" }
+            }
+          }
+        }
+    ports:
+      - "4000:4000"
+      - "4010:4010"
+
+  distribution-center:
+    image: local/rig-demo
+    entrypoint: node distribution-center.js
+    environment:
+      KAFKA_BROKERS: kafka:9092
+
+  track-and-trace:
+    image: local/rig-demo
+    entrypoint: node track-and-trace.js
+    environment:
+      KAFKA_BROKERS: kafka:9092
+
+  customer-experience:
+    image: local/rig-demo
+    entrypoint: node customer-experience.js
+    environment:
+      KAFKA_BROKERS: kafka:9092
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.18
+    environment:
+      - COLLECTOR_ZIPKIN_HTTP_PORT=9411
+    ports:
+      - 5775:5775/udp
+      - 6831:6831/udp
+      - 6832:6832/udp
+      - 5778:5778
+      - 16686:16686
+      - 14268:14268
+      - 14250:14250
+      - 9411:9411
+
+  zookeeper:
+    image: wurstmeister/zookeeper:3.4.6
+    ports:
+      - 2181:2181
+
+  kafka:
+    image: wurstmeister/kafka:0.10.0.1-2
+    environment:
+      - KAFKA_ADVERTISED_HOST_NAME=kafka
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_PORT=9092
+      - KAFKA_CREATE_TOPICS=scanned:1:1,parcelcrossedborder:1:1,ordercrossedborder:1:1
+    ports:
+      - 9092:9092
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - zookeeper
